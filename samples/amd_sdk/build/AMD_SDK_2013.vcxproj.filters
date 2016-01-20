@@ -1,0 +1,53 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\src\Geometry.cpp" />
+    <ClCompile Include="..\src\HelperFunctions.cpp" />
+    <ClCompile Include="..\src\HUD.cpp" />
+    <ClCompile Include="..\src\LineRender.cpp" />
+    <ClCompile Include="..\src\Magnify.cpp" />
+    <ClCompile Include="..\src\MagnifyTool.cpp" />
+    <ClCompile Include="..\src\ShaderCache.cpp" />
+    <ClCompile Include="..\src\Sprite.cpp" />
+    <ClCompile Include="..\src\Timer.cpp" />
+    <ClCompile Include="..\src\ShaderCacheSampleHelper.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\inc\AMD_SDK.h" />
+    <ClInclude Include="..\inc\Geometry.h" />
+    <ClInclude Include="..\inc\HelperFunctions.h" />
+    <ClInclude Include="..\inc\HUD.h" />
+    <ClInclude Include="..\inc\LineRender.h" />
+    <ClInclude Include="..\inc\Magnify.h" />
+    <ClInclude Include="..\inc\MagnifyTool.h" />
+    <ClInclude Include="..\inc\ShaderCache.h" />
+    <ClInclude Include="..\inc\Sprite.h" />
+    <ClInclude Include="..\inc\Timer.h" />
+    <ClInclude Include="..\inc\ShaderCacheSampleHelper.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\shaders\SeparableFilter\FilterCommon.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\shaders\SeparableFilter\FilterKernel.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\shaders\SeparableFilter\HorizontalFilter.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\shaders\Line.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\shaders\Sprite.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\shaders\SeparableFilter\VerticalFilter.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{cf291593-9591-49e8-a273-1b43b1d68e11}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Manifest Include="..\..\DXUT\Core\dpiaware.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\AffinityGPUControl.cpp" />
+    <ClCompile Include="..\..\common\src\ApplicationContext.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\src\Background.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\src\Character.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\src\ClearView.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\src\MGPUAffinity.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{c3a6eec2-b661-4c06-be48-7c4839b633a3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common">
+      <UniqueIdentifier>{6fbe4649-843c-4e5c-910c-11ace87ceec3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\src\AffinityGPUControl.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\shaders\Source\Color.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\shaders\Source\Simple_PS.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\shaders\Source\Simple_VS.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\shaders\Source\Utility.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\common\inc\ApplicationContext.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\common\inc\Background.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\common\inc\Character.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\common\inc\ClearView.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\common\inc\MGPUAffinity.h">
+      <Filter>common</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
