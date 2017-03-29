@@ -63,6 +63,7 @@ static const int                                g_iBackbufferCount = 2;
 //static int                                      g_iDrawRepeat = 1;
 static int                                      g_iDrawRepeat = 10000; // use for GPU load
 static bool                                     g_bSingleSubmission = true;
+static bool                                     g_bUseCFX = true;
 static TransferSyncMode                         g_eTransferSyncMode = TRANSFER_SYNC_AUTOMATIC;
 
 //-------------------------------------------------------------------------------------------------
@@ -74,9 +75,7 @@ static ATL::CComPtr<ALVRDeviceExD3D11>          g_pLvrDevice;
 static ATL::CComPtr<ALVRGpuAffinity>            m_pLvrAffinity;
 static ATL::CComPtr<ALVRMultiGpuDeviceContext>	g_pLvrDeviceContext;
 
-static ATL::CComPtr<ALVRGpuSemaphore>           g_pRenderComplete0;
 static ATL::CComPtr<ALVRGpuSemaphore>           g_pTransferComplete0;
-static ATL::CComPtr<ALVRGpuSemaphore>           g_pRenderComplete1;
 static ATL::CComPtr<ALVRGpuSemaphore>           g_pTransferComplete1;
 
 static ATL::CComPtr<ALVRFence>                  g_pFenceD3D11;
@@ -89,7 +88,7 @@ int _tmain(int argc, _TCHAR* argv[])
 {
     ALVR_RESULT res = ALVR_OK;
 
-    printf("Type 'm' to toggle MGPU.\nType 's' to toggle single/double submission.\nUse UP/DOWN keys to change frame rate.\n Type any other key to exit:\n");
+    printf("Type 'm' to toggle MGPU.\nType 's' to toggle single/double submission.\nType 'x' to toggle CFX.\nUse UP/DOWN keys to change frame rate.\n Type any other key to exit:\n");
 
     __int64 lastRenderTime = 0;
     double fAverageDuration = 0;
@@ -109,6 +108,7 @@ int _tmain(int argc, _TCHAR* argv[])
             char ch = _getch();
             if(ch == 0 || ch == (char)0xE0)
             {
+                ch = _getch();
                 if(ch == (char)0x48)
                 {
                     ch = VK_UP;
@@ -149,7 +149,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
             if(g_bEnableMGPU)
             {
-                if(g_bSingleSubmission)
+                if(g_bSingleSubmission && g_bUseCFX)
                 {
                     // setup right eye 
                     SetGpuAffinity(GPUMASK_RIGHT);
@@ -217,7 +217,14 @@ int _tmain(int argc, _TCHAR* argv[])
             {
                 fAverageDuration = fAverageDuration + 0.05 * (duration - fAverageDuration); // simple alpha filter for values
             }
-            printf("\rMGPU=%s Submission=%s Draws %d Render Time=%.2fms", g_bEnableMGPU ? "ON " : "OFF", g_bSingleSubmission ? "Single" : "Double", g_iDrawRepeat, fAverageDuration);
+            if(g_bUseCFX)
+            { 
+                printf("\rCFX=ON MGPU=%s Submission=%s Draws=%d Render Time=%.2fms", g_bEnableMGPU ? "ON " : "OFF", g_bSingleSubmission ? "Single" : "Double", g_iDrawRepeat, fAverageDuration);
+            }
+            else
+            {
+                printf("\rCFX=OFF MGPU=XXX Submission=Double Draws=%d Render Time=%.2fms", g_iDrawRepeat, fAverageDuration);
+            }
             fflush(stdout);
 
             res = g_D3DHelper.Present();
@@ -294,8 +301,16 @@ ALVR_RESULT Init()
     res = g_pFactory->CreateGpuAffinity(&m_pLvrAffinity);
     CHECK_ALVR_ERROR_RETURN(res, L"CreateGpuAffinity() failed");
 
-    res = m_pLvrAffinity->EnableGpuAffinity(ALVR_GPU_AFFINITY_FLAGS_NONE);
-    CHECK_ALVR_ERROR_RETURN(res, L"EnableGpuAffinity() failed");
+    if(g_bUseCFX)
+    { 
+        res = m_pLvrAffinity->EnableGpuAffinity(ALVR_GPU_AFFINITY_FLAGS_NONE);
+//      CHECK_ALVR_ERROR_RETURN(res, L"EnableGpuAffinity() failed");
+        if(res != ALVR_OK)
+        { 
+            g_bUseCFX = false;
+            LOG_INFO(L"EnableGpuAffinity() failed");
+        }
+    }
     //---------------------------------------------------------------------------------------------
     // create D3D11 device
     //---------------------------------------------------------------------------------------------
@@ -306,24 +321,25 @@ ALVR_RESULT Init()
     // wrap device
     //---------------------------------------------------------------------------------------------
 
-    CComPtr<ID3D11Device>                pd3dDeviceWrapped;
-    CComPtr<ID3D11DeviceContext>         pd3dDeviceContextWrapped;
+    if(g_bUseCFX)
+    {
+        CComPtr<ID3D11Device>                pd3dDeviceWrapped;
+        CComPtr<ID3D11DeviceContext>         pd3dDeviceContextWrapped;
 
-    res = m_pLvrAffinity->WrapDeviceD3D11(g_D3DHelper.m_pd3dDevice, &pd3dDeviceWrapped, &pd3dDeviceContextWrapped, &g_pLvrDeviceContext);
-    CHECK_ALVR_ERROR_RETURN(res, L"WrapDeviceD3D11() failed");
-    g_D3DHelper.m_pd3dDevice = pd3dDeviceWrapped;
-    g_D3DHelper.m_pd3dDeviceContext = pd3dDeviceContextWrapped;
+        res = m_pLvrAffinity->WrapDeviceD3D11(g_D3DHelper.m_pd3dDevice, &pd3dDeviceWrapped, &pd3dDeviceContextWrapped, &g_pLvrDeviceContext);
+        CHECK_ALVR_ERROR_RETURN(res, L"WrapDeviceD3D11() failed");
+        g_D3DHelper.m_pd3dDevice = pd3dDeviceWrapped;
+        g_D3DHelper.m_pd3dDeviceContext = pd3dDeviceContextWrapped;
+    }
 
     res = g_pFactory->CreateALVRDeviceExD3D11(g_D3DHelper.m_pd3dDevice, NULL, &g_pLvrDevice);
     CHECK_ALVR_ERROR_RETURN(res, L"CreateALVRDeviceExD3D11() failed");
 
-    res = g_pLvrDeviceContext->SetGpuRenderAffinity(GPUMASK_BOTH);
-    CHECK_ALVR_ERROR_RETURN(res, L"SetGpuRenderAffinity(GPUMASK_BOTH) failed");
-
-    res = g_pLvrDevice->CreateGpuSemaphore(&g_pRenderComplete0);
-    CHECK_ALVR_ERROR_RETURN(res, L"CreateGpuSemaphore() failed");
-    res = g_pLvrDevice->CreateGpuSemaphore(&g_pRenderComplete1);
-    CHECK_ALVR_ERROR_RETURN(res, L"CreateGpuSemaphore() failed");
+    if(g_bUseCFX)
+    {
+        res = g_pLvrDeviceContext->SetGpuRenderAffinity(GPUMASK_BOTH);
+        CHECK_ALVR_ERROR_RETURN(res, L"SetGpuRenderAffinity(GPUMASK_BOTH) failed");
+    }
     res = g_pLvrDevice->CreateGpuSemaphore(&g_pTransferComplete0);
     CHECK_ALVR_ERROR_RETURN(res, L"CreateGpuSemaphore() failed");
     res = g_pLvrDevice->CreateGpuSemaphore(&g_pTransferComplete1);
@@ -408,8 +424,10 @@ ALVR_RESULT Init()
 
 
 
-    g_pLvrDeviceContext->MarkResourceAsInstanced(g_D3DHelper.m_pConstantBuffer);
-
+    if(g_bUseCFX)
+    {
+        g_pLvrDeviceContext->MarkResourceAsInstanced(g_D3DHelper.m_pConstantBuffer);
+    }
     return ALVR_OK;
 }
 //-------------------------------------------------------------------------------------------------
@@ -461,8 +479,13 @@ ALVR_RESULT ClearFrame()
 ALVR_RESULT TransferEye()
 {
     ALVR_RESULT res = ALVR_OK;
+    if(!g_bUseCFX)
+    {
+        return ALVR_OK;
+    }
 
     g_D3DHelper.m_pd3dDeviceContext->Flush();
+
 
     CComPtr<ID3D11RenderTargetView> pRenderTargetView;
     g_D3DHelper.m_pd3dDeviceContext->OMGetRenderTargets(1, &pRenderTargetView.p, NULL);
@@ -498,19 +521,15 @@ ALVR_RESULT TransferEye()
     case TRANSFER_SYNC_MANUAL:
         {
             // flip-flop semaphores to avoid reuse before completion of previous frame
-            CComPtr<ALVRGpuSemaphore>      pRenderComplete = g_bTransferFlip ? g_pRenderComplete0 : g_pRenderComplete1;
             CComPtr<ALVRGpuSemaphore>      pTransferComplete = g_bTransferFlip ? g_pTransferComplete0 : g_pTransferComplete1;
 
             g_bTransferFlip = !g_bTransferFlip;
-
-            // right engine waits for the left engine for D3D render completion using semaphore
-            res = g_pLvrDevice->QueueSemaphoreSignal(ALVR_GPU_ENGINE_3D, 0, pRenderComplete);   // GPUMASK_LEFT has index 0
-            res = g_pLvrDevice->QueueSemaphoreWait(ALVR_GPU_ENGINE_3D, 1, pRenderComplete);     // GPUMASK_RIGHT has index 1
-
+            
             // transfer from right to left engine - transfer happens in right engine
+            // no need to wait for right engine 
             g_pLvrDeviceContext->TransferResourceEx(pResource, pResource, 1, 0, 0, 0, &rect, &rect, ALVR_GPU_ENGINE_3D, false);
 
-            // left engine waits for the right engine for transfer completion using semaphore
+            // left engine waits for the right engine for transfer completion before present using semaphore
             res = g_pLvrDevice->QueueSemaphoreSignal(ALVR_GPU_ENGINE_3D, 1, pTransferComplete);
             res = g_pLvrDevice->QueueSemaphoreWait(ALVR_GPU_ENGINE_3D, 0, pTransferComplete);
         }
@@ -525,9 +544,7 @@ ALVR_RESULT TransferEye()
 //-------------------------------------------------------------------------------------------------
 ALVR_RESULT Terminate()
 {
-    g_pRenderComplete0.Release();
     g_pTransferComplete0.Release();
-    g_pRenderComplete1.Release();
     g_pTransferComplete1.Release();
 
     g_pFenceD3D11.Release();
@@ -550,6 +567,10 @@ ALVR_RESULT Terminate()
 //-------------------------------------------------------------------------------------------------
 ALVR_RESULT SetGpuAffinity(GpuMask mask)
 {
+    if(g_pLvrDeviceContext == NULL)
+    {
+        return ALVR_OK;
+    }
     return g_pLvrDeviceContext->SetGpuRenderAffinity(mask);
 }
 //-------------------------------------------------------------------------------------------------
@@ -595,6 +616,14 @@ bool HandleKeyboard(UINT_PTR ch)
     else if(ch == 'S' || ch == 's')
     {
         g_bSingleSubmission = !g_bSingleSubmission;
+    }
+    else if(ch == 'X' || ch == 'x')
+    {
+        // toggle CFX
+        g_bUseCFX = !g_bUseCFX;
+        Terminate();
+        Init();
+
     }
     else if(ch == VK_UP)
     {

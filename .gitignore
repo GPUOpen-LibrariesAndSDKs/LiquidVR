@@ -7,6 +7,7 @@
 # Build results
 [Bb]in/
 [Oo]bj/
+[Ll]ib/
 
 # Visual Studo 2015 cache/options directory
 .vs/
@@ -18,6 +19,8 @@ ipch/
 *.opensdf
 *.sdf
 *.cachefile
+*.opendb
+*.VC.db
 
 # Visual Studio profiler
 *.psess

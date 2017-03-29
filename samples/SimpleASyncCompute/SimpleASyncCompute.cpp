@@ -45,6 +45,10 @@ static int                                      g_iGridWidth = 100;
 static int                                      g_iLineWidth = 5;
 static bool                                     g_bCpuSync = false;
 static bool                                     g_bHighPriorityQueue = false;
+static bool                                     g_bTestSlices = false;
+static bool                                     g_bTestMips = false;
+static bool                                     g_bValidateBinding = false;
+
 //-------------------------------------------------------------------------------------------------
 
 ALVR_RESULT Init();
@@ -69,11 +73,13 @@ static ATL::CComPtr<ALVRComputeTask>            g_pGridTask;
 static ATL::CComPtr<ALVRBuffer>                 g_pGridConstantBuffer;
 static ATL::CComPtr<ALVRSampler>                g_pGridSampler;
 static ATL::CComPtr<ALVRSurface>                g_pGridOutputSurface;
+static ATL::CComPtr<ALVRSurface>                g_pGridOutputSurfaceMultiSlice;
 
 static ATL::CComPtr<ALVRComputeTask>            g_pBlurTask;
 static ATL::CComPtr<ALVRBuffer>                 g_pBlurConstantBuffer;
 static ATL::CComPtr<ALVRSampler>                g_pBlurSampler;
 static ATL::CComPtr<ALVRSurface>                g_pBlurOutputSurface;
+static ATL::CComPtr<ALVRSurface>                g_pBlurOutputSurfaceMultiSlice;
 static ATL::CComPtr<ID3D11ShaderResourceView>   g_BlurShaderResourceView;
 
 static ATL::CComPtr<ALVRGpuSemaphore>           g_pShaderComplete[2];
@@ -119,6 +125,7 @@ int _tmain(int argc, _TCHAR* argv[])
             char ch = _getch();
             if(ch == 0 || ch == (char)0xE0)
             {
+                ch = _getch();
                 if(ch == (char)0x48)
                 {
                     ch = VK_UP;
@@ -405,7 +412,6 @@ ALVR_RESULT Init()
     CHECK_ALVR_ERROR_RETURN(res, L"Create3DScene() failed");
 
     // Create ASync Compute context
-
     ALVRComputeContextDesc computeDesc = {};
     computeDesc.flags = g_bHighPriorityQueue ? ALVR_COMPUTE_HIGH_PRIORITY : ALVR_COMPUTE_NONE;
 
@@ -413,6 +419,10 @@ ALVR_RESULT Init()
     if(res != ALVR_OK && g_bHighPriorityQueue)
     {
         LOG_INFO(L"CreateComputeContext() failed - High Priorty Queue is not available");
+        
+        // Reset HPQ to false
+        g_bHighPriorityQueue = false;
+
         computeDesc.flags = ALVR_COMPUTE_NONE;
         res = g_pFactory->CreateComputeContext(g_pLvrDevice, 0, &computeDesc, &g_pComputeContext);
     }
@@ -441,6 +451,11 @@ ALVR_RESULT Init()
 
     res = g_pComputeContext->CreateComputeTask(ALVR_SHADER_MODEL_D3D11, 0, pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), &g_pGridTask);
     CHECK_ALVR_ERROR_RETURN(res, L"CreateComputeTask(Grid) failed");
+
+	ALVRVariantStruct bVariantStruct;
+	bVariantStruct.type = ALVR_VARIANT_BOOL;
+	bVariantStruct.boolValue = g_bValidateBinding;
+	g_pGridTask->SetProperty(ALVR_COMPUTE_PROPERTY_VALIDATE_RESOURCE_BINDING, bVariantStruct);
 
     //---------------------------------------------------------------------------------------------
     // Create the Grid Buffer
@@ -495,14 +510,19 @@ ALVR_RESULT Init()
     res = g_pComputeContext->CreateComputeTask(ALVR_SHADER_MODEL_D3D11, 0, pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), &g_pBlurTask);
     CHECK_ALVR_ERROR_RETURN(res, L"CreateComputeTask(Blur) failed");
 
+	bVariantStruct.boolValue = g_bValidateBinding;
+	g_pBlurTask->SetProperty(ALVR_COMPUTE_PROPERTY_VALIDATE_RESOURCE_BINDING, bVariantStruct);
+
     //---------------------------------------------------------------------------------------------
     // Create the Blur Sampler
     //---------------------------------------------------------------------------------------------
-    ALVRSamplerDesc samplerDesc;
+    ALVRSamplerDesc samplerDesc ={};
     samplerDesc.filterMode = ALVR_FILTER_POINT;
     samplerDesc.addressU = ALVR_ADDRESS_CLAMP;
     samplerDesc.addressV = ALVR_ADDRESS_CLAMP;
     samplerDesc.addressW = ALVR_ADDRESS_CLAMP;
+    samplerDesc.maxAnisotropy = 1;
+    samplerDesc.borderColorType = ALVR_BORDER_COLOR_OPAQUE_BLACK;
 
     res = g_pComputeContext->CreateSampler(&samplerDesc, &g_pBlurSampler);
     CHECK_ALVR_ERROR_RETURN(res, L"CreateSampler(Blur) failed");
@@ -570,8 +590,42 @@ ALVR_RESULT Init()
     descSurf.depth = 1;
     descSurf.format = ALVR_FORMAT_R8G8B8A8_UNORM;
 
-    res = g_pComputeContext->CreateSurface(&descSurf, &g_pGridOutputSurface);
-    CHECK_ALVR_ERROR_RETURN(res, L"CreateSurface(Grid) failed");
+    if(g_bTestSlices)
+    {
+        descSurf.sliceCount = 4;
+        descSurf.mipCount = 1;
+        if(g_bTestMips)
+        {
+            descSurf.mipCount = 4;
+        }
+        
+        res = g_pComputeContext->CreateSurface(&descSurf, &g_pGridOutputSurfaceMultiSlice);
+        CHECK_ALVR_ERROR_RETURN(res, L"CreateSurface(Grid) failed");
+
+        ALVRChildSurfaceDesc childDesc = {};
+        childDesc.startMip = 0;
+        childDesc.mipCount = 1;
+        if(g_bTestMips)
+        {
+            childDesc.startMip = 2;
+        }
+        childDesc.startSlice = 2;
+        childDesc.sliceCount = 1;
+        childDesc.shaderInputFormat = ALVR_FORMAT_UNKNOWN;  //optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+        childDesc.shaderOutputFormat = ALVR_FORMAT_UNKNOWN; //optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+
+        res = g_pComputeContext->CreateChildSurface(g_pGridOutputSurfaceMultiSlice, &childDesc, &g_pGridOutputSurface);
+        CHECK_ALVR_ERROR_RETURN(res, L"CreateChildSurface(Grid) failed");
+    }
+    else
+    {
+        descSurf.sliceCount = 1;
+        descSurf.mipCount = 1;
+        res = g_pComputeContext->CreateSurface(&descSurf, &g_pGridOutputSurface);
+        CHECK_ALVR_ERROR_RETURN(res, L"CreateSurface(Grid) failed");
+    }
+
+
 
     res = g_pGridTask->BindOutput(0, g_pGridOutputSurface);
     CHECK_ALVR_ERROR_RETURN(res, L"BindOutput(Grid) failed");
@@ -582,9 +636,40 @@ ALVR_RESULT Init()
 
     descSurf.apiSupport = ALVR_RESOURCE_API_ASYNC_COMPUTE | ALVR_RESOURCE_API_D3D11;
 
-    res = g_pComputeContext->CreateSurface(&descSurf, &g_pBlurOutputSurface);
-    CHECK_ALVR_ERROR_RETURN(res, L"CreateSurface(Blur) failed");
+    if(g_bTestSlices)
+    {
+        descSurf.sliceCount = 4;
+        descSurf.mipCount = 1;
+        if(g_bTestMips)
+        {
+            descSurf.mipCount = 4;
+        }
+        res = g_pComputeContext->CreateSurface(&descSurf, &g_pBlurOutputSurfaceMultiSlice);
+        CHECK_ALVR_ERROR_RETURN(res, L"CreateSurface(Blur) failed");
 
+        ALVRChildSurfaceDesc childDesc ={};
+        childDesc.startMip = 0;
+        childDesc.mipCount = 1;
+        if(g_bTestMips)
+        {
+            childDesc.startMip = 2;
+        }
+        childDesc.startSlice = 2;
+        childDesc.sliceCount = 1;
+        childDesc.shaderInputFormat = ALVR_FORMAT_UNKNOWN;  //optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+        childDesc.shaderOutputFormat = ALVR_FORMAT_UNKNOWN; //optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+
+        res = g_pComputeContext->CreateChildSurface(g_pBlurOutputSurfaceMultiSlice, &childDesc, &g_pBlurOutputSurface);
+        CHECK_ALVR_ERROR_RETURN(res, L"CreateChildSurface(Blur) failed");
+
+    }
+    else
+    {
+        descSurf.sliceCount = 1;
+        descSurf.mipCount = 1;
+        res = g_pComputeContext->CreateSurface(&descSurf, &g_pBlurOutputSurface);
+        CHECK_ALVR_ERROR_RETURN(res, L"CreateSurface(Blur) failed");
+    }
     res = g_pBlurTask->BindOutput(0, g_pBlurOutputSurface);
     CHECK_ALVR_ERROR_RETURN(res, L"BindOutput(Blur) failed");
 
@@ -601,10 +686,24 @@ ALVR_RESULT Init()
 
     D3D11_SHADER_RESOURCE_VIEW_DESC shaderResDesc ={};
     shaderResDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    shaderResDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    shaderResDesc.Texture2D.MipLevels = 1;
-    shaderResDesc.Texture2D.MostDetailedMip = 0;
-
+    if(g_bTestSlices)
+    {
+        shaderResDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+        shaderResDesc.Texture2DArray.ArraySize = 1;
+        shaderResDesc.Texture2DArray.FirstArraySlice = 2;
+        shaderResDesc.Texture2DArray.MipLevels = 1;
+        shaderResDesc.Texture2DArray.MostDetailedMip = 0;
+        if(g_bTestMips)
+        {
+            shaderResDesc.Texture2DArray.MostDetailedMip = 2;
+        }
+    }
+    else
+    {
+        shaderResDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        shaderResDesc.Texture2D.MipLevels = 1;
+        shaderResDesc.Texture2D.MostDetailedMip = 0;
+    }
     hr = g_D3DHelper.m_pd3dDevice->CreateShaderResourceView(resource.pResource, &shaderResDesc, &g_BlurShaderResourceView);
     resource.pResource->Release();
     CHECK_HRESULT_ERROR_RETURN(hr, L"CreateShaderResourceView() failed");
@@ -628,11 +727,13 @@ ALVR_RESULT Init()
 //-------------------------------------------------------------------------------------------------
 ALVR_RESULT Terminate()
 {
+    g_pGridOutputSurfaceMultiSlice.Release();
     g_pGridOutputSurface.Release();
     g_pGridConstantBuffer.Release();
     g_pGridSampler.Release();
     g_pGridTask.Release();
 
+    g_pBlurOutputSurfaceMultiSlice.Release();
     g_pBlurOutputSurface.Release();
     g_pBlurConstantBuffer.Release();
     g_pBlurSampler.Release();
@@ -648,8 +749,6 @@ ALVR_RESULT Terminate()
     }
 
     g_pComputeContext.Release();
-
-    g_pLvrDevice.Release();
 
     ::DestroyWindow(g_hWindow);
 
@@ -681,6 +780,7 @@ ALVR_RESULT RenderTexture()
 {
     if(g_bCpuSync)
     {
+        // Submit fence to compute queue for CPU to wait for 3D queue on GPU to finish before executing shader tasks
         WaitForCompletion();
     }
     static const int THREAD_GROUP_SIZE = 8; // the same as in shaders
@@ -693,14 +793,13 @@ ALVR_RESULT RenderTexture()
     res = g_pComputeContext->QueueTask(g_pGridTask, &offset, &size);
     CHECK_ALVR_ERROR_RETURN(res, L"QueueTask(Grid) failed");
 
-
     res = g_pComputeContext->QueueTask(g_pBlurTask, &offset, &size);
     CHECK_ALVR_ERROR_RETURN(res, L"QueueTask(Blur) failed");
 
     if(g_bCpuSync)
     {
         g_pComputeContext->Flush(g_pFenceRender);
-        g_pFenceRender->Wait(2000);
+        g_pFenceRender->Wait(2000); // CPU waits until compute queue is complete
     }
     else
     {
@@ -711,6 +810,7 @@ ALVR_RESULT RenderTexture()
             g_iShaderCompleteFlip = 0;
         }
         g_pComputeContext->Flush(NULL);
+        // Use semaphore to sync between compute queue and 3D queue on GPU
         g_pComputeContext->QueueSemaphoreSignal(pShaderComplete);
         g_pLvrDevice->QueueSemaphoreWait(ALVR_GPU_ENGINE_3D, 0, pShaderComplete);
     }
@@ -803,6 +903,11 @@ const char s_pBlurShaderText[] =
 "    uint  height;                                                                                      \n"
 "    float4 avSampleWeights[16];                                                                        \n"
 "};                                                                                                     \n"
+"// fake constant buffer to test validation - see  g_bValidateBinding                                   \n"
+"cbuffer Test : register(b1)                                                                            \n"
+"{                                                                                                      \n"
+"    uint  tmp;                                                                                         \n"
+"};                                                                                                     \n"
 "                                                                                                       \n"
 "[numthreads(8, 8, 1)]                                                                                  \n"
 "void main(uint3 coord : SV_DispatchThreadID)                                                           \n"
@@ -849,6 +954,7 @@ static float GaussianDistribution(float x, float y, float rho)
 //-------------------------------------------------------------------------------------------------
 ALVR_RESULT WaitForCompletion()
 {
+    // Submit a fence to the compute queue to indicate the CPU must wait before continuing
     ALVR_RESULT res = g_pLvrDevice->SubmitFence(0, g_pFenceRender);
     CHECK_ALVR_ERROR_RETURN(res, L"SubmitFence() failed");
     res = g_pFenceRender->Wait(2000);

@@ -92,3 +92,5 @@ protected:
     virtual ALVR_RESULT PrepareTextureCube();
 
 };
+
+ALVR_RESULT ConvertFromatFromDXGIToALVR(DXGI_FORMAT dxgi, ALVR_FORMAT &alvr);

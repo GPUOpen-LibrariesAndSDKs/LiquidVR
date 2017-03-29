@@ -101,7 +101,7 @@ void HUD::OnResizedSwapChain( const DXGI_SURFACE_DESC* pBackBufferSurfaceDesc )
 void HUD::OnRender( float fElapsedTime )
 {
     m_GUI.OnRender( fElapsedTime );
-    m_Sprite.RenderSprite( m_pLogoSRV, DXUTGetDXGIBackBufferSurfaceDesc()->Width - 250, DXUTGetDXGIBackBufferSurfaceDesc()->Height, 250, 70, true, false );
+    m_Sprite.RenderSprite( m_pLogoSRV, DXUTGetDXGIBackBufferSurfaceDesc()->Width - 253, DXUTGetDXGIBackBufferSurfaceDesc()->Height, 256, 64, true, false );
 }
 
 

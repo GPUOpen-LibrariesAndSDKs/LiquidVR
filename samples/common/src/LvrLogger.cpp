@@ -73,16 +73,16 @@ static const wchar_t* resultString[] =
     L"False",                    //ALVR_FALSE = 1,
     L"Fail",                    //ALVR_FAIL = 2,
     L"Invalid argument",        //ALVR_INVALID_ARGUMENT = 3,
-    L"Not Initilized",            //ALVR_NOT_INITIALIZED = 4,
-    L"Not sufficent buffer",    //ALVR_NOT_SUFFICIENT_BUFFER = 5,
+    L"Not initialized",            //ALVR_NOT_INITIALIZED = 4,
+    L"Not sufficient buffer",    //ALVR_NOT_SUFFICIENT_BUFFER = 5,
     L"Not implemented",            //ALVR_NOT_IMPLEMENTED = 6,
     L"NULL pointer",            //ALVR_NULL_POINTER = 7,
     L"Already initialized",        //ALVR_ALREADY_INITIALIZED = 8,
-    L"Unsupported Version",        //ALVR_UNSUPPORTED_VERSION = 9,
+    L"Unsupported version",        //ALVR_UNSUPPORTED_VERSION = 9,
     L"Out of memory",            // ALVR_OUT_OF_MEMORY = 10,
     L"Display removed",        //ALVR_DISPLAY_REMOVED = 11,
-    L"Dispaly used",        //ALVR_DISPLAY_USED = 12,
-    L"Display unavailabe",        //ALVR_DISPLAY_UNAVAILABLE = 13,
+    L"Display used",        //ALVR_DISPLAY_USED = 12,
+    L"Display unavailable",        //ALVR_DISPLAY_UNAVAILABLE = 13,
     L"Display not enabled",        //ALVR_DISPLAY_NOT_ENABLED = 14,
     L"Outstanding present frame",        //ALVR_OUTSTANDING_PRESENT_FRAME = 15,
     L"Device lost",        //ALVR_DEVICE_LOST = 16,
@@ -92,7 +92,11 @@ static const wchar_t* resultString[] =
     L"Resource is not bound",   // ALVR_RESOURCE_IS_NOT_BOUND
     L"Unsupported",             //ALVR_UNSUPPORTED
     L"Incompatible driver", // ALVR_INCOMPATIBLE_DRIVER
-    L"Device mismatch" /// ALVR_DEVICE_MISMATCH
+    L"Device mismatch", // ALVR_DEVICE_MISMATCH
+    L"Invalid display timing", //ALVR_INVALID_DISPLAY_TIMING     = 24,
+    L"Invalid display resolution", //ALVR_INVALID_DISPLAY_RESOLUTION = 25,
+    L"Invalid display scaling", //ALVR_INVALID_DISPLAY_SCALING    = 26,
+    L"Invalid display out of spec", //ALVR_INVALID_DISPLAY_OUT_OF_SPEC = 27,
 };
 
 const wchar_t* ALVRResultToString(ALVR_RESULT res)
@@ -130,6 +134,35 @@ __int64 high_precision_clock()
         {
             return static_cast<__int64>((PerformanceCount.QuadPart - StartCount.QuadPart) * 10000000LL / Frequency.QuadPart);
         }
+    }
+#if defined(METRO_APP)
+    return GetTickCount64() * 10;
+
+#else
+    return GetTickCount() * 10;
+#endif
+}
+//-------------------------------------------------------------------------------------------------
+__int64 qpc_to_high_precision_clock(__int64 qpc)
+{
+    static int state = 0;
+    static LARGE_INTEGER Frequency;
+    static LARGE_INTEGER StartCount;
+    if(state == 0)
+    {
+        if(QueryPerformanceFrequency(&Frequency))
+        {
+            state = 1;
+            QueryPerformanceCounter(&StartCount);
+        }
+        else
+        {
+            state = 2;
+        }
+    }
+    if(state == 1)
+    {
+        return static_cast<__int64>((qpc - StartCount.QuadPart) * 10000000LL / Frequency.QuadPart);
     }
 #if defined(METRO_APP)
     return GetTickCount64() * 10;

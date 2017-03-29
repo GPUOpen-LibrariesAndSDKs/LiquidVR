@@ -1,4 +1,4 @@
-﻿Copyright (c) 2016 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2016 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -18,6 +18,49 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
+Compatible Drivers:
+===================
+16.60
 
-Initial version:
+Changes:
+
+build 1.0.10.0 November 29, 2016
+    - Motion Estimator fiji support
+
+build 1.0.9.0 November 16, 2016
+    - d2d change
+
+build 1.0.8.0 September 12, 2016
+    - Vulkan/Motion Estimation changes
+
+build 1.0.7.0 August 23, 2016
+    - added Vulkan interop support
+    - added Motion Estimator
+
+build 1.0.6.0 July 12, 2016
+    - d2d change
+
+build 1.0.5.0 July 29, 2016
+    - transfer optimization in SimpleMGPU sample
+
+build 1.0.5.0 June 01, 2016
+    - latest Shim changes for MGPU
+
+build 1.0.5.0 Apr 28, 2016
+    - HDCP status API for D2D
+    - Fixed D2D11 device / context shims for corner cases in MGPU scenario
+
+build 1.0.4.4 Mar 23, 2016
+    - extern "C" around ALVRQueryVersion
+    - HDCP on hidden displays, 
+    - fixed the conditon of error return in SignalSemaphoreOnVsync
+    - async compute shader profiling
+
+build 1.0.4.3 Feb 16, 2016
+    - SimpleD2D sample extended to use vsync events 
+
+build 1.0.4.2 Feb 02, 2016
+    - basic power management added
+
 build 1.0.3.20 Jan 18, 2016
+    - initial version

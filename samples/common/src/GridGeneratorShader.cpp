@@ -104,11 +104,12 @@ HRESULT GridGeneratorShader::Start()
         XMVECTORF32 colorFg = Colors::LightGray;
         XMStoreFloat4(&m_Params.colorFg, colorFg);
 
-        ALVRSamplerDesc samplerDesc;
+        ALVRSamplerDesc samplerDesc = {};
         samplerDesc.filterMode = ALVR_FILTER_POINT;
         samplerDesc.addressU = ALVR_ADDRESS_CLAMP;
         samplerDesc.addressV = ALVR_ADDRESS_CLAMP;
         samplerDesc.addressW = ALVR_ADDRESS_CLAMP;
+        samplerDesc.maxAnisotropy = 1;
 
         m_pComputeContext->CreateSampler(&samplerDesc, &m_pSampler);
 

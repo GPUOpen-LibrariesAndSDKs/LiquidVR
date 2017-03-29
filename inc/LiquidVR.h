@@ -27,8 +27,8 @@
 
 #define ALVR_VERSION_MAJOR          1
 #define ALVR_VERSION_MINOR          0
-#define ALVR_VERSION_RELEASE        3
-#define ALVR_VERSION_BUILD          20
+#define ALVR_VERSION_RELEASE        10
+#define ALVR_VERSION_BUILD          0
 
 #define ALVR_FULL_VERSION ( (uint64_t(ALVR_VERSION_MAJOR) << 48ull) | (uint64_t(ALVR_VERSION_MINOR) << 32ull) | (uint64_t(ALVR_VERSION_RELEASE) << 16ull)  | uint64_t(ALVR_VERSION_BUILD))
 
@@ -40,7 +40,25 @@
 
 /**
 ***************************************************************************************************
-* @brief error codes
+* @brief Forward declarations
+***************************************************************************************************
+*/
+#define FORWARD_VK_HANDLE(object) typedef struct object##_T* object;
+#if defined(_WIN64)
+#define FORWARD_VK_NON_DISPATCH_HANDLE(object) typedef struct object##_T* object;
+#else
+#define FORWARD_VK_NON_DISPATCH_HANDLE(object) typedef uint64_t object;
+#endif
+
+FORWARD_VK_HANDLE(VkInstance)
+FORWARD_VK_HANDLE(VkDevice)
+FORWARD_VK_NON_DISPATCH_HANDLE(VkBuffer)
+FORWARD_VK_NON_DISPATCH_HANDLE(VkImage)
+FORWARD_VK_NON_DISPATCH_HANDLE(VkSemaphore)
+
+/**
+***************************************************************************************************
+* @brief Error codes
 ***************************************************************************************************
 */
 enum ALVR_RESULT
@@ -69,11 +87,15 @@ enum ALVR_RESULT
     ALVR_UNSUPPORTED                = 21,
     ALVR_INCOMPATIBLE_DRIVER        = 22,
     ALVR_DEVICE_MISMATCH            = 23,
+    ALVR_INVALID_DISPLAY_TIMING     = 24,
+    ALVR_INVALID_DISPLAY_RESOLUTION = 25,
+    ALVR_INVALID_DISPLAY_SCALING    = 26,
+    ALVR_INVALID_DISPLAY_OUT_OF_SPEC= 27,
 };
 
 /**
 ***************************************************************************************************
-* @brief transfer engines
+* @brief Transfer engines
 ***************************************************************************************************
 */
 enum ALVR_GPU_ENGINE
@@ -84,13 +106,15 @@ enum ALVR_GPU_ENGINE
 
 /**
 ***************************************************************************************************
-* @brief interop APIs
+* @brief Interop APIs
 ***************************************************************************************************
 */
 enum ALVR_RENDER_API
 {
-    ALVR_RENDER_API_ASYNC_COMPUTE   = 0,
-    ALVR_RENDER_API_D3D11           = 1,
+    ALVR_RENDER_API_ASYNC_COMPUTE       = 0,
+    ALVR_RENDER_API_D3D11               = 1,
+    ALVR_RENDER_API_VULKAN              = 2,
+    ALVR_RENDER_API_MOTION_ESTIMATOR    = 3
 };
 
 /**
@@ -163,13 +187,14 @@ enum ALVR_FORMAT
     ALVR_FORMAT_BC6H_SF16 = 96,                                 // DXGI_FORMAT_BC6H_SF16 = 96,
     ALVR_FORMAT_BC7_UNORM = 98,                                 // DXGI_FORMAT_BC7_UNORM = 98,
     ALVR_FORMAT_BC7_UNORM_SRGB = 99,                            // DXGI_FORMAT_BC7_UNORM_SRGB = 99,
+    ALVR_FORMAT_NV12 = 103,                                     // DXGI_FORMAT_NV12 = 103,
     ALVR_FORMAT_FORCE_UINT = 0xffffffff                         // DXGI_FORMAT_FORCE_UINT = 0xffffffff
 };
 
 
 /**
 ***************************************************************************************************
-* @brief base interface for all ALVR interfaces
+* @brief Base interface for all ALVR interfaces
 ***************************************************************************************************
 */
 
@@ -177,7 +202,7 @@ typedef IUnknown ALVRInterface;
 
 /**
 ***************************************************************************************************
-* @brief This interface is responsible to set / get optional properties
+* @brief This interface is used to get and set optional properties
 ***************************************************************************************************
 */
 
@@ -193,9 +218,9 @@ enum ALVR_VARIANT_TYPE
     ALVR_VARIANT_SIZE               = 5,
     ALVR_VARIANT_POINT              = 6,
 
-    ALVR_VARIANT_STRING             = 7,  // value is char*
-    ALVR_VARIANT_WSTRING            = 8,  // value is wchar*
-    ALVR_VARIANT_INTERFACE          = 9,  // value is ALVRInterface*
+    ALVR_VARIANT_STRING             = 7,  // Value is char*
+    ALVR_VARIANT_WSTRING            = 8,  // Value is wchar*
+    ALVR_VARIANT_INTERFACE          = 9,  // Value is ALVRInterface*
 };
 
 struct ALVRVariantStruct
@@ -215,6 +240,14 @@ struct ALVRVariantStruct
     };
 };
 
+struct ALVRRational
+{
+    unsigned int    numerator;
+    unsigned int    denominator;
+};
+
+
+
 ALVR_INTERFACE("A4A8B01D-2E99-447E-917A-67772781B10C")
 ALVRPropertyStorage : public ALVRInterface
 {
@@ -226,7 +259,7 @@ public:
     virtual size_t          ALVR_STD_CALL       GetPropertyCount() const = 0;
     virtual ALVR_RESULT     ALVR_STD_CALL       GetPropertyAt(size_t index, wchar_t* name, size_t nameSize, ALVRVariantStruct* pValue) const = 0;
 
-    // to use these templates include LiquidVRVariant.h
+    // Include LiquidVRVariant.h to use these templates
     template<typename _T>
     ALVR_RESULT             ALVR_STD_CALL       SetProperty(const wchar_t* name, const _T& value);
     template<typename _T>
@@ -234,7 +267,7 @@ public:
 };
 /**
 ***************************************************************************************************
-* @brief This interface is responsible for syncronization between Gpus and GpuEngines
+* @brief This interface is responsible for synchronization between GPUs and GpuEngines
 ***************************************************************************************************
 */
 
@@ -245,19 +278,19 @@ ALVRGpuSemaphore : public ALVRInterface
 
 /**
 ***************************************************************************************************
-* @brief This interface is responsible for syncronization between Gpu and CPU
+* @brief This interface is responsible for synchronization between the GPU and CPU
 ***************************************************************************************************
 */
 ALVR_INTERFACE("4B15FFAE-0A80-4E6A-8478-1149390B8F6E")
 ALVRFence : public ALVRInterface
 {
     virtual ALVR_RESULT         ALVR_STD_CALL GetStatus(void) = 0;
-    virtual ALVR_RESULT         ALVR_STD_CALL Wait(unsigned int timeout) = 0; // timeout in ms
+    virtual ALVR_RESULT         ALVR_STD_CALL Wait(unsigned int timeout) = 0; // Timeout in ms
 };
 
 /**
 ***************************************************************************************************
-* @brief This interface is responsible for mapping timesamps between Gpu and CPU
+* @brief This interface is responsible for mapping timestamps between the GPU and CPU
 ***************************************************************************************************
 */
 ALVR_INTERFACE("36CB702C-7741-48E3-B96A-1A40D844EE7D")
@@ -271,7 +304,7 @@ ALVRGpuTimeline : public ALVRInterface
 
 /**
 ***************************************************************************************************
-* @brief resource interface
+* @brief Resource interface
 ***************************************************************************************************
 */
 
@@ -291,7 +324,7 @@ public:
 
 /**
 ***************************************************************************************************
-* @brief constant buffer interface
+* @brief Constant buffer interface
 ***************************************************************************************************
 */
 ALVR_INTERFACE("96CAAC8D-2712-4941-8ABA-A6C98172D748")
@@ -305,7 +338,7 @@ public:
 
 /**
 ***************************************************************************************************
-* @brief surface interface
+* @brief Surface interface
 ***************************************************************************************************
 */
 
@@ -322,7 +355,7 @@ ALVRSurface : public ALVRResource
 
 /**
 ***************************************************************************************************
-* @brief late latch constant buffer for use with D3D11 rendering
+* @brief Late latch constant buffer for use with D3D11 rendering
 ***************************************************************************************************
 */
 ALVR_INTERFACE("752333C8-0CB0-4176-B1FD-B4C11D104A14")
@@ -344,15 +377,15 @@ ALVRLateLatchConstantBufferD3D11 : public ALVRInterface
 
 struct ALVRGpuControlInfo
 {
-    unsigned int                    numGpus;                                    ///< Number of GPUs available for control
-    unsigned int                    maskAllGpus;                                ///< GPU Mask representing all active GPUs
-    unsigned int                    maskDisplayGpu;                            ///< GPU Mask representing the display GPU
+    unsigned int                    numGpus;		///< Number of GPUs available for control
+    unsigned int                    maskAllGpus;	///< GPU Mask representing all active GPUs
+    unsigned int                    maskDisplayGpu;	///< GPU Mask representing the display GPU
 };
 
 /**
 ***************************************************************************************************
 * @brief This interface is responsible for extending the ID3D11DeviceContext and adding
-*   Liquid VR MGPU functionality.
+*   Liquid VR MGPU functionality
 ***************************************************************************************************
 */
 ALVR_INTERFACE("AB36ED9B-D3F6-493B-B049-406353063110")
@@ -402,7 +435,7 @@ ALVR_INTERFACE("00573967-A082-4A88-9F9B-E49F41D13773")
 ALVRGpuAffinity : public ALVRPropertyStorage
 {
     virtual ALVR_RESULT         ALVR_STD_CALL EnableGpuAffinity(
-                                    unsigned int flags) = 0;    //ALVR_GPU_AFFINITY_FLAGS
+                                    unsigned int flags) = 0;    // ALVR_GPU_AFFINITY_FLAGS
     virtual ALVR_RESULT         ALVR_STD_CALL DisableGpuAffinity() = 0;
     virtual ALVR_RESULT         ALVR_STD_CALL WrapDeviceD3D11(
                                     ID3D11Device* pDevice,
@@ -413,7 +446,7 @@ ALVRGpuAffinity : public ALVRPropertyStorage
 
 /**
 ***************************************************************************************************
-* @brief base interface for device extension
+* @brief Base interface for device extension
 ***************************************************************************************************
 */
 
@@ -425,7 +458,7 @@ public:
 
 /**
 ***************************************************************************************************
-* @brief optional flags for late data latch buffer creation
+* @brief Optional flags for late data latch buffer creation
 ***************************************************************************************************
 */
 
@@ -435,9 +468,10 @@ enum ALVR_LATE_LATCH_BUFFER_FLAGS
     ALVR_LATE_LATCH_SHARED_BUFFER   = 0x00000001,
 };
 
+
 /**
 ***************************************************************************************************
-* @brief interface provides functionality for D3D11 device extension
+* @brief Interface provides functionality for D3D11 device extension
 ***************************************************************************************************
 */
 
@@ -459,9 +493,8 @@ public:
     virtual ALVR_RESULT         ALVR_STD_CALL CreateLateLatchConstantBufferD3D11(
                                     size_t updateSize,
                                     unsigned int numberOfUpdates,
-                                    unsigned int bufferFlags,                       //ALVR_LATE_LATCH_BUFFER_FLAGS
+                                    unsigned int bufferFlags,                       // ALVR_LATE_LATCH_BUFFER_FLAGS
                                     ALVRLateLatchConstantBufferD3D11** ppBuffer) = 0;
-
 };
 
 enum ALVR_SURFACE_FLAGS
@@ -475,20 +508,23 @@ enum ALVR_RESOURCE_API_SUPPORT
 {
     ALVR_RESOURCE_API_ASYNC_COMPUTE = 1 << ALVR_RENDER_API_ASYNC_COMPUTE,
     ALVR_RESOURCE_API_D3D11 = 1 << ALVR_RENDER_API_D3D11,
+    ALVR_RESOURCE_API_VULKAN = 1 << ALVR_RENDER_API_VULKAN,
+    ALVR_RESOURCE_API_MOTION_ESTIMATOR = 1 << ALVR_RENDER_API_MOTION_ESTIMATOR
 };
 
 enum ALVR_SURFACE_TYPE
 {
-    ALVR_SURFACE_1D = 0,
-    ALVR_SURFACE_2D = 1,
-    ALVR_SURFACE_3D = 2,
+    ALVR_SURFACE_1D     = 0,
+    ALVR_SURFACE_2D     = 1,
+    ALVR_SURFACE_3D     = 2,
+    ALVR_SURFACE_CUBE   = 3,
 };
 
 enum ALVR_BUFFER_FLAGS
 {
-    ALVR_BUFFER_SHADER_INPUT    = 0x00000001,
-    ALVR_BUFFER_SHADER_OUTPUT   = 0x00000002,
-    ALVR_BUFFER_CONSTANT        = 0x00000004,
+    ALVR_BUFFER_SHADER_INPUT        = 0x00000001,
+    ALVR_BUFFER_SHADER_OUTPUT       = 0x00000002,
+    ALVR_BUFFER_CONSTANT            = 0x00000004,
 };
 
 enum ALVR_CPU_ACCESS_FLAGS
@@ -512,9 +548,14 @@ struct ALVRSurfaceDesc
     unsigned int        apiSupport;     // ALVR_RESOURCE_API_SUPPORT
     unsigned int        width;
     unsigned int        height;
-    unsigned int        depth;
-    ALVR_FORMAT         shaderInputFormat;  //optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
-    ALVR_FORMAT         shaderOutputFormat; //optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+    union
+    {
+        unsigned int    depth;
+        unsigned int    sliceCount;
+    };
+    ALVR_FORMAT         shaderInputFormat;  // Optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+    ALVR_FORMAT         shaderOutputFormat; // Optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+    unsigned int        mipCount;
 };
 
 struct ALVRBufferDesc
@@ -524,7 +565,7 @@ struct ALVRBufferDesc
     unsigned int        apiSupport;         // ALVR_RESOURCE_API_SUPPORT
     size_t              size;
     size_t              structureStride;
-    ALVR_FORMAT         format;             // typed buffer - put ALVR_FORMAT_UNKNOWN (0) if not needed
+    ALVR_FORMAT         format;             // Typed buffer - put ALVR_FORMAT_UNKNOWN (0) if not needed
 };
 
 struct ALVROpenBufferDesc
@@ -532,8 +573,17 @@ struct ALVROpenBufferDesc
     HANDLE              sharedHandle;
     unsigned int        bufferFlags;        // ALVR_BUFFER_FLAGS
     size_t              structureStride;
-    ALVR_FORMAT         format;             // typed buffer - put ALVR_FORMAT_UNKNOWN  (0) if not needed
+    ALVR_FORMAT         format;             // Typed buffer - put ALVR_FORMAT_UNKNOWN  (0) if not needed
     unsigned int        openFlags;          // ALVR_OPEN_SHARED_FLAGS
+};
+
+struct ALVRPinBufferDesc
+{
+    void*               buffer;
+    unsigned int        bufferFlags;        // ALVR_BUFFER_FLAGS
+    size_t              size;               // 4K aligned
+    size_t              structureStride;
+    ALVR_FORMAT         format;             // Typed buffer - put ALVR_FORMAT_UNKNOWN  (0) if not needed
 };
 
 struct ALVROpenSurfaceDesc
@@ -542,22 +592,50 @@ struct ALVROpenSurfaceDesc
     ALVR_FORMAT         format;
     unsigned int        surfaceFlags;       // ALVR_SURFACE_FLAGS
     unsigned int        openFlags;          // ALVR_OPEN_SHARED_FLAGS
-    ALVR_FORMAT         shaderInputFormat;  //optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
-    ALVR_FORMAT         shaderOutputFormat; //optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+    ALVR_FORMAT         shaderInputFormat;  // Optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+    ALVR_FORMAT         shaderOutputFormat; // Optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+    unsigned int        sliceCount;
+    unsigned int        mipCount;
+    unsigned int        sampleCount;
+    ALVR_SURFACE_TYPE   type;
 };
 
+struct ALVRChildSurfaceDesc
+{
+    unsigned int        startMip;
+    unsigned int        mipCount;
+    unsigned int        startSlice;
+    unsigned int        sliceCount;
+    ALVR_FORMAT         shaderInputFormat;  // Optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+    ALVR_FORMAT         shaderOutputFormat; // Optional, can be defined by format, put ALVR_FORMAT_UNKNOWN (0) if not needed
+};
 
 enum ALVR_FILTER_MODE
 {
-    ALVR_FILTER_POINT = 0,
-    ALVR_FILTER_LINEAR = 1,
+    ALVR_FILTER_POINT                           = 0,
+    ALVR_FILTER_LINEAR                          = 1,
+    ALVR_FILTER_MAG_LINEAR_MIN_POINT_MIP_POINT  = 2,
+    ALVR_FILTER_MAG_POINT_MIN_LINEAR_MIP_POINT  = 3,
+    ALVR_FILTER_MAG_LINEAR_MIN_LINEAR_MIP_POINT = 4,
+    ALVR_FILTER_MAG_POINT_MIN_POINT_MIP_LINEAR  = 5,
+    ALVR_FILTER_MAG_LINEAR_MIN_POINT_MIP_LINEAR = 6,
+    ALVR_FILTER_MAG_POINT_MIN_LINEAR_MIP_LINEAR = 7,
+    ALVR_FILTER_ANISOTROPIC                     = 8,
 };
 
 enum ALVR_ADDRESS_MODE
 {
-    ALVR_ADDRESS_WRAP = 0,
-    ALVR_ADDRESS_MIRROR = 1,
-    ALVR_ADDRESS_CLAMP = 2,
+    ALVR_ADDRESS_WRAP           = 0,
+    ALVR_ADDRESS_MIRROR         = 1,
+    ALVR_ADDRESS_CLAMP          = 2,
+    ALVR_ADDRESS_MIRROR_ONCE    = 3,
+    ALVR_ADDRESS_CLAMP_BORDER   = 4,
+};
+enum ALVR_BORDER_COLOR
+{
+    ALVR_BORDER_COLOR_WHITE             = 0,
+    ALVR_BORDER_COLOR_TRANSPARENT_BLACK = 1,
+    ALVR_BORDER_COLOR_OPAQUE_BLACK      = 2,
 };
 
 struct ALVRSamplerDesc
@@ -566,6 +644,11 @@ struct ALVRSamplerDesc
     ALVR_ADDRESS_MODE   addressU;
     ALVR_ADDRESS_MODE   addressV;
     ALVR_ADDRESS_MODE   addressW;
+    unsigned int        maxAnisotropy;
+    float               mipLodBias;
+    float               minLod;
+    float               maxLod;
+    ALVR_BORDER_COLOR   borderColorType;
 };
 
 /**
@@ -593,6 +676,8 @@ public:
     virtual  ALVR_RESULT        ALVR_STD_CALL BindInput(unsigned int slot, ALVRResource *pResource) = 0;
     virtual  ALVR_RESULT        ALVR_STD_CALL BindOutput(unsigned int slot, ALVRResource *pResource) = 0;
 };
+
+#define ALVR_COMPUTE_PROPERTY_VALIDATE_RESOURCE_BINDING  L"ALVRValidateResourceBinding" // bool (true, false), default = true - enables/ disables shader binding validation in ALVRComputeTask::Queue()
 
 ALVR_INTERFACE("D030B60E-7BE1-4096-B81D-70A44B9714BB")
 ALVRComputeTimestamp : public ALVRInterface
@@ -676,12 +761,157 @@ public:
 
     virtual  ALVR_RESULT        ALVR_STD_CALL OpenSharedBuffer(const ALVROpenBufferDesc *pDesc, ALVRBuffer** ppBuffer) = 0;
     virtual  ALVR_RESULT        ALVR_STD_CALL OpenSharedSurface(const ALVROpenSurfaceDesc* pDesc, ALVRSurface **ppSurface) = 0;
+    virtual  ALVR_RESULT        ALVR_STD_CALL CreateChildSurface(ALVRSurface* pParentSurface, const ALVRChildSurfaceDesc* pDesc, ALVRSurface **ppSurface) = 0;
+    virtual  ALVR_RESULT        ALVR_STD_CALL PinBuffer(const ALVRPinBufferDesc *pDesc, ALVRBuffer** ppBuffer) = 0;
+
+    virtual ALVR_RESULT         ALVR_STD_CALL CreateFence(ALVRFence** ppFence) = 0;
+};
+/**
+***************************************************************************************************
+* @brief Vulkan extension
+***************************************************************************************************
+*/
+
+enum ALVR_SEMAPHORE_SHARED_FLAGS
+{
+    ALVR_SEMAPHORE_SHARED_NONE = 0x00000000,
+    ALVR_SEMAPHORE_SHARED_CROSS_PROCESS = 0x00000001,
+};
+
+enum ALVR_VULKAN_RESOURCE_TYPE
+{
+    ALVR_VULKAN_RESOURCE_BUFFER = 0,
+    ALVR_VULKAN_RESOURCE_IMAGE = 1
+};
+
+struct ALVRVulkanMultiDeviceInfo
+{
+    LUID                    adapterLuid;
+    unsigned int            gpuIdx;
+};
+
+struct ALVRVulkanOpenBufferDesc
+{
+    HANDLE                  sharedHandle;
+    unsigned int            flags; // Reserved for now, should be 0.
+    unsigned int            usage;
+    uint32_t                queueFamilyIndexCount;
+    const uint32_t*         pQueueFamilyIndices;
+    ALVR_OPEN_SHARED_FLAGS  sharedFlags;
+};
+
+struct ALVRVulkanOpenSemaphoreDesc
+{
+    ALVRGpuSemaphore*           pSemaphore;
+    ALVR_SEMAPHORE_SHARED_FLAGS sharedFlags;
+};
+
+struct ALVRVulkanOpenSurfaceDesc
+{
+    HANDLE                  sharedHandle;
+    unsigned int            flags;  // Only VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT and
+                                    // VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT supported
+    int                     format; // Must be compatible with original resource format
+    unsigned int            usage;  // Must be compatible with original resource usage
+    uint32_t                queueFamilyIndexCount;
+    const uint32_t*         pQueueFamilyIndices;
+    ALVR_OPEN_SHARED_FLAGS  sharedFlags;
+};
+
+struct ALVRResourceVulkan
+{
+    ALVR_VULKAN_RESOURCE_TYPE resourceType;
+    union
+    {
+        VkBuffer buffer;
+        VkImage  image;
+    };
+};
+
+ALVR_INTERFACE("A91FC257-90A1-46AB-9063-39C24D95F38D")
+ALVRDeviceExVulkan : public ALVRDeviceEx
+{
+public:
+    virtual ALVR_RESULT     ALVR_STD_CALL OpenSharedBuffer(
+                                const ALVRVulkanOpenBufferDesc* pDesc,
+                                VkBuffer* pBuffer) = 0;
+
+    virtual ALVR_RESULT     ALVR_STD_CALL OpenSharedImage(
+                                const ALVRVulkanOpenSurfaceDesc* pDesc,
+                                VkImage* pImage) = 0;
+
+    virtual ALVR_RESULT     ALVR_STD_CALL OpenLVRSemaphore(
+                                const ALVRVulkanOpenSemaphoreDesc* pDesc,
+                                VkSemaphore* pSemaphore) = 0;
+};
+
+
+ALVR_INTERFACE("B8AF5A09-A4D5-493E-BD0F-2743FC74B2A5")
+ALVRExtensionVulkan : public ALVRPropertyStorage
+{
+public:
+    virtual ALVR_RESULT     ALVR_STD_CALL GetMultiDeviceInfo(
+                                VkDevice pDevice,
+                                ALVRVulkanMultiDeviceInfo* pInfo) = 0;
+
+    virtual ALVR_RESULT     ALVR_STD_CALL CreateALVRDeviceExVulkan(
+                                VkDevice pDevice,
+                                void* pConfigDesc, // Optional configuration info reserved
+                                ALVRDeviceExVulkan** ppDeviceEx) = 0;
 };
 
 
 /**
 ***************************************************************************************************
-* @brief factory interface
+* @brief Motion Estimator interface
+***************************************************************************************************
+*/
+
+#pragma pack(push, 1)
+struct ALVRMotionVector
+{
+    int16_t x;
+    int16_t y;
+    int16_t reserved[2];
+};
+
+struct ALVRMotionVectorForMB
+{
+    ALVRMotionVector    regions[2][2];
+};
+#pragma pack(pop)
+
+struct ALVRMotionEstimatorConfig
+{
+    uint32_t width;
+    uint32_t height;
+};
+
+struct ALVRMotionEstimatorDesc
+{
+    uint32_t maxWidthInPixels;      //  Max supported width of input surfaces in pixels
+    uint32_t maxHeightInPixels;     //  Max supported height of input surfaces in pixels
+    uint32_t mbWidth;               //  Macroblock width in pixels
+    uint32_t mbHeight;              //  Macroblock height in pixels
+    uint32_t regionWidth;           //  Region width
+    uint32_t regionHeight;          //  Region height
+    ALVRRational precision;         //  Motion vector precision: (1, 4) - means quarter pixel
+};
+
+ALVR_INTERFACE("3F5B9713-DB8B-4FB9-B71B-4C08C6C39CC9")
+ALVRMotionEstimator : public ALVRPropertyStorage
+{
+    virtual ALVR_RESULT ALVR_STD_CALL Open(const ALVRMotionEstimatorConfig* pConfigDesc) = 0;
+    virtual ALVR_RESULT ALVR_STD_CALL Close() = 0;
+    virtual ALVR_RESULT ALVR_STD_CALL GetDesc(ALVRMotionEstimatorDesc* pDesc) = 0;
+    virtual ALVR_RESULT ALVR_STD_CALL SubmitFrames(ALVRSurface* curFrame, ALVRSurface* prevFrame, ALVRBuffer* motionVectors, const void* opt, int64_t* jobID) = 0; //  Build motion vectors
+    virtual ALVR_RESULT ALVR_STD_CALL QueryMotionVectors(int64_t* jobID) = 0; //  Retrieve motion vectors
+};
+
+
+/**
+***************************************************************************************************
+* @brief Factory interface
 ***************************************************************************************************
 */
 
@@ -691,18 +921,30 @@ ALVRFactory
     // MultiGPU
     virtual ALVR_RESULT         ALVR_STD_CALL CreateGpuAffinity(ALVRGpuAffinity** ppAffinity) = 0;
 
-    // device extensions
+    // Device extension
     virtual ALVR_RESULT         ALVR_STD_CALL CreateALVRDeviceExD3D11(
                                     ID3D11Device* pd3dDevice,
-                                    void* pConfigDesc, // optional configuration info reserved
+                                    void* pConfigDesc, // Optional configuration info reserved
                                     ALVRDeviceExD3D11** ppDevice) = 0;
 
-    // compute
+    // Compute
     virtual  ALVR_RESULT        ALVR_STD_CALL CreateComputeContext(
                                     ALVRDeviceEx* pDevice,
                                     unsigned int gpuIdx,
-                                    ALVRComputeContextDesc* pDesc, // optional configuration info
+                                    ALVRComputeContextDesc* pDesc, // Optional configuration info
                                     ALVRComputeContext** ppContext) = 0;
+
+    // Vulkan extension
+    virtual ALVR_RESULT         ALVR_STD_CALL CreateALVRExtensionVulkan(
+                                    VkInstance vkInstance,
+                                    void* pConfigDesc, // Optional configuration info reserved
+                                    ALVRExtensionVulkan** ppExt) = 0;
+
+    // Motion Estimator extension
+    virtual ALVR_RESULT     ALVR_STD_CALL   CreateMotionEstimator(
+        ALVRDeviceEx* pDevice,
+        void* pConfigDesc, // Optional configuration info reserved
+        ALVRMotionEstimator** ppMotionEstimator) = 0;
 
 };
 
@@ -712,18 +954,20 @@ ALVRFactory
     #define ALVR_DLL_NAME    L"amdlvr32.dll"
 #endif
 
-#define ALVR_INIT_FUNCTION_NAME    "ALVRInit"
+#define ALVR_INIT_FUNCTION_NAME             "ALVRInit"
+#define ALVR_QUERY_VERSION_FUNCTION_NAME    "ALVRQueryVersion"
 
 /**
 ***************************************************************************************************
-* @brief entry point
+* @brief Entry point
 ***************************************************************************************************
 */
 typedef ALVR_RESULT(ALVR_CDECL_CALL *ALVRInit_Fn)(uint64_t version, void **ppFactory);
+typedef ALVR_RESULT(ALVR_CDECL_CALL *ALVRQueryVersion_Fn)(uint64_t *pVersion);
 
 /**
 ***************************************************************************************************
-* end of file
+* End of file
 ***************************************************************************************************
 */
 

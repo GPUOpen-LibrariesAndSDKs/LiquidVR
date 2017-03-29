@@ -27,6 +27,7 @@
 #include "../../../inc/LiquidVR.h"
 
 __int64 high_precision_clock();
+__int64 qpc_to_high_precision_clock(__int64 qpc);
 void increase_timer_precision();
 
 const wchar_t* ALVRResultToString(ALVR_RESULT res);
