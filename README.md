@@ -8,6 +8,10 @@ LiquidVR&trade; provides a Direct3D 11 based interface for applications to acces
 * **Late-Latch** : Provides ability to reduce input or tracking latency by reading constant data updated by the CPU after the original Direct3D 11 calls.
 * **GPU-to-GPU Resource Copies** : Provides ability to copy resources between GPUs with explicit control over synchronization.
 
+In Version 1.1 (driver 17.4.1 / 17.10.1061), we added support for:
+* Motion Estimation: Calculates the motion estimation generated from two surface frames.  Motion estimation works on specific GPUs and can be used for ASW.
+* Vulkan Interoperability:  Provides conversion for buffers, surfaces and semaphores.
+
 ### Installation
 The LiquidVR run-time is automatically installed by the current AMD drivers. All that is needed for usage in an application is the `LiquidVR.h` header file in the `inc` folder.
 
